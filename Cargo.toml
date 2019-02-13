@@ -1,0 +1,10 @@
+[package]
+name = "ecs-nbody"
+version = "0.1.0"
+authors = ["Kolaer <overlordin777@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+specs = "0.14.3"
+rand = "0.6.5"
+rayon = "1.0.3"
