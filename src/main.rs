@@ -22,7 +22,7 @@ struct Position {
 }
 
 impl Component for Position {
-    type Storage = DenseVecStorage<Self>;
+    type Storage = VecStorage<Self>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -32,7 +32,7 @@ struct Velocity {
 }
 
 impl Component for Velocity {
-    type Storage = DenseVecStorage<Self>;
+    type Storage = VecStorage<Self>;
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -74,41 +74,39 @@ impl<'a> System<'a> for UpdateVel {
     );
 
     fn run(&mut self, data: Self::SystemData) {
-        use specs::Join;
-
         let (ent, delta, pos, mass, mut vel) = data;
 
         let delta = delta.0;
 
-        (&ent, &pos, &mass, &mut vel).par_join().for_each(
-            |(first_ent, first_pos, first_mass, first_vel)| {
-                let first_mass = first_mass.0;
+        (&ent, &pos, &mut vel)
+            .par_join()
+            .for_each(|(first_ent, first_pos, first_vel)| {
+                (&ent, &mass, &pos)
+                    .join()
+                    .for_each(|(second_ent, second_mass, second_pos)| {
+                        let second_mass = second_mass.0;
 
-                for (second_ent, second_mass, second_pos) in (&ent, &mass, &pos).join() {
-                    let second_mass = second_mass.0;
+                        if first_ent.id() != second_ent.id() {
+                            let r_sq = (second_pos.x - first_pos.x).powi(2)
+                                + (second_pos.y - first_pos.y).powi(2);
+                            let force = GRAVITY_CONST * second_mass / r_sq;
 
-                    if first_ent.id() != second_ent.id() {
-                        let r_sq = (second_pos.x - first_pos.x).powi(2)
-                            + (second_pos.y - first_pos.y).powi(2);
-                        let force = GRAVITY_CONST * second_mass * first_mass / r_sq;
+                            let dir_x_sq = (second_pos.x - first_pos.x).powi(2);
+                            let dir_y_sq = (second_pos.y - first_pos.y).powi(2);
 
-                        let dir_x = second_pos.x - first_pos.x;
-                        let dir_y = second_pos.y - first_pos.y;
+                            let dir_mag_sq = dir_x_sq + dir_y_sq;
 
-                        let dir_mag_sq = dir_x.powi(2) + dir_y.powi(2);
+                            let dir_x = dir_x_sq / dir_mag_sq;
+                            let dir_y = dir_y_sq / dir_mag_sq;
 
-                        let dir_x = dir_x.powi(2) / dir_mag_sq;
-                        let dir_y = dir_y.powi(2) / dir_mag_sq;
+                            let acc_x = force * dir_x;
+                            let acc_y = force * dir_y;
 
-                        let acc_x = (force * dir_x) / first_mass;
-                        let acc_y = (force * dir_y) / first_mass;
-
-                        first_vel.x += acc_x * delta;
-                        first_vel.y += acc_y * delta;
-                    }
-                }
-            },
-        );
+                            first_vel.x += acc_x * delta;
+                            first_vel.y += acc_y * delta;
+                        }
+                    });
+            });
     }
 }
 
